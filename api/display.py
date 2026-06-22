@@ -1,5 +1,4 @@
 import tkinter as tk
-from tkinter import PhotoImage
 from PIL import Image, ImageTk
 import threading
 import time
@@ -10,7 +9,9 @@ window = None
 label_text = None
 label_image = None
 display_lock = threading.Lock()
-IDLE_IMAGE_PATH = "media/images/robot_idle.png"
+IMAGE_DIR = "media/images"
+IDLE_IMAGE_PATH = f"{IMAGE_DIR}/robot_idle.png"
+_current_photo = None
 
 
 def _init_window():
@@ -24,36 +25,30 @@ def _init_window():
         width, height = get_screen_size()
         window.geometry(f"{width}x{height}")
 
-        # Create a frame to hold image and text
+        # Frame fills the screen; image and text are layered with place()
         frame = tk.Frame(window, bg="black")
         frame.pack(expand=True, fill="both")
 
-        # Image label (background)
         label_image = tk.Label(frame, bg="black")
-        label_image.pack(expand=True, fill="both")
+        label_image.place(x=0, y=0, relwidth=1, relheight=1)
 
-        # Text label (overlay)
         label_text = tk.Label(
             frame,
             text="",
             font=("Arial", 60),
             fg="white",
             bg="black",
-            wraplength=width - 100
+            wraplength=width - 100,
         )
-        label_text.pack(expand=True, fill="both")
+        label_text.place(relx=0.5, rely=0.5, anchor="center")
 
         window.configure(bg="black")
 
         # Load and display idle image
         if os.path.exists(IDLE_IMAGE_PATH):
             try:
-                img = Image.open(IDLE_IMAGE_PATH)
-                # Resize image to fit screen
-                img.thumbnail((width, height), Image.Resampling.LANCZOS)
-                photo = ImageTk.PhotoImage(img)
-                label_image.config(image=photo)
-                label_image.image = photo  # Keep a reference
+                photo = _load_image_photo(IDLE_IMAGE_PATH, width, height)
+                _set_label_image(photo)
             except Exception as e:
                 print(f"Error loading image: {e}")
 
@@ -61,6 +56,39 @@ def _init_window():
         window.mainloop()
     except Exception as e:
         print(f"Display initialization error: {e}")
+
+
+def _load_image_photo(path: str, width: int, height: int):
+    img = Image.open(path)
+    img.thumbnail((width, height), Image.Resampling.LANCZOS)
+    return ImageTk.PhotoImage(img)
+
+
+def _set_label_image(photo):
+    global _current_photo
+    _current_photo = photo
+    label_image.config(image=photo)
+    label_image.image = photo
+
+
+def _restore_idle_image():
+    global _current_photo
+
+    if label_image is None or window is None:
+        return
+
+    if not os.path.exists(IDLE_IMAGE_PATH):
+        _current_photo = None
+        label_image.config(image="")
+        label_image.image = None
+        return
+
+    try:
+        width, height = get_screen_size()
+        photo = _load_image_photo(IDLE_IMAGE_PATH, width, height)
+        _set_label_image(photo)
+    except Exception as e:
+        print(f"Error restoring idle image: {e}")
 
 
 def start_display():
@@ -78,9 +106,13 @@ def show_message(text: str, duration: int = 3):
     global label_text, window
 
     with display_lock:
-        # Initialize display if needed
         if window is None:
             start_display()
+
+        for _ in range(30):
+            if label_text is not None:
+                break
+            time.sleep(0.1)
 
         if label_text is not None:
             try:
@@ -88,6 +120,7 @@ def show_message(text: str, duration: int = 3):
                 def update_text():
                     try:
                         label_text.config(text=text)
+                        label_text.lift()
 
                         # Schedule clear after duration
                         if duration > 0:
@@ -101,3 +134,37 @@ def show_message(text: str, duration: int = 3):
                 print(f"Display message: {text}")
         else:
             print(f"Display message: {text}")
+
+
+def show_image(file: str, duration: int = 0):
+    """Display an image on the kiosk."""
+    global label_image, window
+
+    path = os.path.join(IMAGE_DIR, file)
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Image not found: {path}")
+
+    with display_lock:
+        if window is None:
+            start_display()
+
+        if label_image is None:
+            print(f"Display image: {path}")
+            return
+
+        def update_image():
+            try:
+                width, height = get_screen_size()
+                photo = _load_image_photo(path, width, height)
+                _set_label_image(photo)
+                if label_text is not None:
+                    label_text.lift()
+
+                if duration > 0:
+                    label_image.after(duration * 1000, _restore_idle_image)
+            except tk.TclError as e:
+                print(f"Display error: {e}")
+            except Exception as e:
+                print(f"Error loading image: {e}")
+
+        label_image.after(0, update_image)

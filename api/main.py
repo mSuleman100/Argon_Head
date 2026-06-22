@@ -1,9 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from api.audio import play_audio
 from api.video import play_video
-from api.display import show_message
+from api.display import show_image, show_message
 
 app = FastAPI()
 
@@ -19,6 +19,11 @@ class VideoRequest(BaseModel):
 class MessageRequest(BaseModel):
     text: str
     duration: int = 3
+
+
+class ImageRequest(BaseModel):
+    file: str
+    duration: int = 0
 
 
 @app.get("/")
@@ -42,3 +47,12 @@ def video(req: VideoRequest):
 def message(req: MessageRequest):
     show_message(req.text, duration=req.duration)
     return {"status": "shown", "message": req.text, "duration": req.duration}
+
+
+@app.post("/show_image")
+def image(req: ImageRequest):
+    try:
+        show_image(req.file, duration=req.duration)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"status": "shown", "file": req.file, "duration": req.duration}
