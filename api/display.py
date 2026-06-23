@@ -12,10 +12,11 @@ display_lock = threading.Lock()
 IMAGE_DIR = "media/images"
 IDLE_IMAGE_PATH = f"{IMAGE_DIR}/robot_idle.png"
 _current_photo = None
+_screen_size = (1024, 768)
 
 
 def _init_window():
-    global window, label_text, label_image
+    global window, label_text, label_image, _screen_size
 
     try:
         window = tk.Tk()
@@ -23,6 +24,7 @@ def _init_window():
         window.attributes('-fullscreen', True)  # Fullscreen mode
 
         width, height = get_screen_size()
+        _screen_size = (width, height)
         window.geometry(f"{width}x{height}")
 
         # Frame fills the screen; image and text are layered with place()
@@ -84,8 +86,7 @@ def _restore_idle_image():
         return
 
     try:
-        width, height = get_screen_size()
-        photo = _load_image_photo(IDLE_IMAGE_PATH, width, height)
+        photo = _load_image_photo(IDLE_IMAGE_PATH, *_screen_size)
         _set_label_image(photo)
     except Exception as e:
         print(f"Error restoring idle image: {e}")
@@ -148,14 +149,18 @@ def show_image(file: str, duration: int = 0):
         if window is None:
             start_display()
 
+        for _ in range(30):
+            if label_image is not None:
+                break
+            time.sleep(0.1)
+
         if label_image is None:
             print(f"Display image: {path}")
             return
 
         def update_image():
             try:
-                width, height = get_screen_size()
-                photo = _load_image_photo(path, width, height)
+                photo = _load_image_photo(path, *_screen_size)
                 _set_label_image(photo)
                 if label_text is not None:
                     label_text.lift()

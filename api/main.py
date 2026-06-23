@@ -23,7 +23,7 @@ class MessageRequest(BaseModel):
 
 class ImageRequest(BaseModel):
     file: str
-    duration: int = 0
+    duration: int = 10
 
 
 @app.get("/")
@@ -33,7 +33,10 @@ def root():
 
 @app.post("/play_audio")
 def audio(req: AudioRequest):
-    play_audio(req.file)
+    try:
+        play_audio(req.file)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"status": "playing", "file": req.file}
 
 
